@@ -1,0 +1,22 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE settings
+.idea/
+
+# Local configuration and runtime data
+.env
+logs/
+data/*
+!data/.gitkeep
+!data/audio/
+data/audio/*
+!data/audio/.gitkeep

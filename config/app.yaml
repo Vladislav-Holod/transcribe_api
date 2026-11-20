@@ -1,0 +1,13 @@
+title: Transcription API
+version: "0.1.0"
+debug: false
+docs_enabled: true
+
+allow_origins: ["http://localhost:3000"]
+allow_credentials: false
+allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+allow_headers: ["Content-Type", "Authorization"]
+
+logging:
+  file: logs/transcribe.log
+  level: INFO

@@ -1,0 +1,66 @@
+Enum task_status {
+  queued
+  processing
+  completed
+  failed
+}
+
+Table transcriber_settings {
+  id uuid [pk]
+  chunk_duration_seconds double [not null, default: 20, check: `chunk_duration_seconds > 0`, note: 'Максимальная длительность фрагмента для распознавания.']
+  chunk_overlap_seconds double [not null, default: 0, check: `chunk_overlap_seconds >= 0 AND chunk_overlap_seconds < chunk_duration_seconds`, note: 'Перекрытие соседних фрагментов; при склейке текста нужно устранять повторы.']
+  use_vad boolean [not null, default: false, note: 'Определять участки речи перед распознаванием.']
+  batch_size integer [not null, default: 1, check: `batch_size > 0`, note: 'Количество фрагментов в одном пакете распознавания.']
+  word_timestamps boolean [not null, default: false, note: 'Возвращать временные метки слов, если адаптер поддерживает их.']
+  created_at timestamptz [not null, default: `now()`]
+
+  Note: 'Общие параметры обработки аудио. Адаптер проверяет поддержку параметров и ограничения модели; неподдерживаемые значения отклоняются. Настройки, использованные в задачах, не изменять. Устройство и оптимизации вычислений задаются в конфигурации воркера.'
+}
+
+Table transcribers {
+  id uuid [pk]
+  engine varchar(100) [not null, note: 'Движок распознавания, например gigaam.']
+  model_name varchar(255) [not null, note: 'Идентификатор модели движка, например v3_e2e_rnnt.']
+  settings_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    settings_id
+  }
+
+  Note: 'Для изменения настроек после запуска задач создавать новый транскриптор с новой записью настроек.'
+}
+
+Table service_settings {
+  id integer [pk, default: 1, check: `id = 1`]
+  default_transcriber_id uuid [not null]
+}
+
+Table transcription_tasks {
+  id uuid [pk]
+  transcriber_id uuid [not null]
+  original_filename text [not null]
+  audio_path text [not null]
+  status task_status [not null, default: 'queued']
+  attempt_count integer [not null, default: 0, check: `attempt_count >= 0`]
+  error_message text
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    transcriber_id
+    (status, created_at)
+  }
+}
+
+Table transcriptions {
+  task_id uuid [pk]
+  text text [not null]
+  duration_seconds double [not null, check: `duration_seconds >= 0`]
+}
+
+Ref: transcribers.settings_id > transcriber_settings.id [delete: restrict]
+Ref: transcription_tasks.transcriber_id > transcribers.id [delete: restrict]
+Ref: transcriptions.task_id - transcription_tasks.id [delete: cascade]
+Ref: service_settings.default_transcriber_id > transcribers.id [delete: restrict]
