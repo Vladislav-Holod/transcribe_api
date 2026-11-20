@@ -20,12 +20,14 @@ class TaskStatus(str, Enum):
 class TranscriberSettings(Base):
     __tablename__ = "transcriber_settings"
     __table_args__ = (
+        CheckConstraint("device IN ('cpu', 'cuda')", name="ck_transcriber_device"),
         CheckConstraint("chunk_duration_seconds > 0", name="ck_chunk_duration"),
         CheckConstraint("chunk_overlap_seconds >= 0 AND chunk_overlap_seconds < chunk_duration_seconds",
             name="ck_chunk_overlap",),
         CheckConstraint("batch_size > 0", name="ck_batch_size"),)
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    device: Mapped[str] = mapped_column(String(10), default="cpu", server_default="cpu")
     chunk_duration_seconds: Mapped[float] = mapped_column(default=20)
     chunk_overlap_seconds: Mapped[float] = mapped_column(default=0)
     use_vad: Mapped[bool] = mapped_column(default=False)
@@ -40,6 +42,7 @@ class Transcriber(Base):
     __tablename__ = "transcribers"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    is_active: Mapped[bool] = mapped_column(default=True, server_default="1")
     engine: Mapped[str] = mapped_column(String(100))
     model_name: Mapped[str] = mapped_column(String(255))
     settings_id: Mapped[UUID] = mapped_column(
@@ -69,7 +72,7 @@ class TranscriptionTask(Base):
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     transcriber_id: Mapped[UUID] = mapped_column(ForeignKey("transcribers.id", ondelete="RESTRICT"), index=True)
     original_filename: Mapped[str] = mapped_column(Text)
-    audio_path: Mapped[str] = mapped_column(Text)
+    file_uuid: Mapped[UUID] = mapped_column(default=uuid4, unique=True)
     status: Mapped[TaskStatus] = mapped_column(
         SqlEnum(TaskStatus, name="task_status", native_enum=False, create_constraint=True,
             values_callable=lambda statuses: [status.value for status in statuses],

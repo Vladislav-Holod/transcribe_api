@@ -9,6 +9,7 @@ from app.db.models import (
     Transcriber,
     TranscriberSettings,
     TranscriptionTask,
+    Transcription_Text
 )
 
 
@@ -29,20 +30,15 @@ class TranscriberRepository:
             return None
         return row[0], row[1]
 
-    async def get_by_id(self, transcriber_id: UUID) -> Transcriber | None:
-        return await self.session.get(Transcriber, transcriber_id)
-
-
 class TranscriptionTaskRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def create(self,*,transcriber_id: UUID,original_filename: str,audio_path: str,
+    async def create(self,*,transcriber_id: UUID,original_filename: str,
     ) -> TranscriptionTask:
         task = TranscriptionTask(
             transcriber_id=transcriber_id,
             original_filename=original_filename,
-            audio_path=audio_path,
             status=TaskStatus.QUEUED,
         )
         self.session.add(task)
@@ -75,3 +71,33 @@ class TranscriptionTaskRepository:
             claimed_id,
             populate_existing=True,
         )
+    async def complete(self, task_id: UUID, text: str, duration_seconds: float) -> None:
+        task = await self.session.get(TranscriptionTask, task_id)
+        if task is None or task.status != TaskStatus.PROCESSING:
+            raise RuntimeError("Задача не находится в обработке")
+
+        self.session.add(Transcription_Text(task_id=task_id, text=text, duration_seconds=duration_seconds))
+        task.status = TaskStatus.COMPLETED
+        task.error_message = None
+        task.finished_at = func.now()
+        await self.session.flush()
+
+    async def fail(self, task_id: UUID, error_message: str) -> None:
+        task = await self.session.get(TranscriptionTask, task_id)
+        if task is None or task.status != TaskStatus.PROCESSING:
+            raise RuntimeError("Задача не находится в обработке")
+
+        task.status = TaskStatus.FAILED
+        task.error_message = error_message
+        task.finished_at = func.now()
+        await self.session.flush()
+
+    async def recover(self, transcriber_id: UUID) -> list[UUID]:
+        # Вызывать при запуске единственного worker.
+        await self.session.execute(
+            update(TranscriptionTask)
+            .where(TranscriptionTask.transcriber_id == transcriber_id, TranscriptionTask.status == TaskStatus.PROCESSING)
+            .values(status=TaskStatus.QUEUED, started_at=None, finished_at=None, error_message=None)
+        )
+        query = select(TranscriptionTask.id).where(TranscriptionTask.transcriber_id == transcriber_id, TranscriptionTask.status == TaskStatus.QUEUED).order_by(TranscriptionTask.created_at)
+        return list((await self.session.scalars(query)).all())

@@ -38,7 +38,8 @@ async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as db:
         try:
             yield db
-            await db.commit()
+            if db.in_transaction():
+                await db.commit()
         except Exception:
             await db.rollback()
             raise

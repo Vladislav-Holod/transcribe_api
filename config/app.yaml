@@ -11,3 +11,7 @@ allow_headers: ["Content-Type", "Authorization"]
 logging:
   file: logs/transcribe.log
   level: INFO
+
+rabbit:
+  queue_name: transcription.tasks
+  prefetch_count: 1

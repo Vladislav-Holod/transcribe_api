@@ -35,9 +35,9 @@ class TranscriptionTaskRepositoryTests(unittest.IsolatedAsyncioTestCase):
             task = await repository.create(
                 transcriber_id=self.transcriber_id,
                 original_filename="audio.wav",
-                audio_path="audio/audio.wav",
             )
             task_id = task.id
+            file_uuid = task.file_uuid
             self.assertEqual(task.status, TaskStatus.QUEUED)
             self.assertEqual(task.attempt_count, 0)
 
@@ -47,6 +47,7 @@ class TranscriptionTaskRepositoryTests(unittest.IsolatedAsyncioTestCase):
             if stored is None:
                 self.fail("Created task was not found")
             self.assertEqual(stored.original_filename, "audio.wav")
+            self.assertEqual(stored.file_uuid, file_uuid)
 
             claimed = await repository.claim(task_id)
             if claimed is None:
@@ -62,6 +63,31 @@ class TranscriptionTaskRepositoryTests(unittest.IsolatedAsyncioTestCase):
             unknown_id = uuid4()
             self.assertIsNone(await repository.get_by_id(unknown_id))
             self.assertIsNone(await repository.claim(unknown_id))
+
+    async def test_recover_requeues_interrupted_tasks_for_default_transcriber(self):
+        async with self.factory.begin() as session:
+            repository = TranscriptionTaskRepository(session)
+            task = await repository.create(
+                transcriber_id=self.transcriber_id,
+                original_filename="interrupted.wav",
+            )
+            task_id = task.id
+
+        async with self.factory.begin() as session:
+            claimed = await TranscriptionTaskRepository(session).claim(task_id)
+            self.assertIsNotNone(claimed)
+
+        async with self.factory.begin() as session:
+            recovered_ids = await TranscriptionTaskRepository(session).recover(
+                self.transcriber_id
+            )
+            self.assertEqual(recovered_ids, [task_id])
+
+        async with self.factory() as session:
+            recovered = await TranscriptionTaskRepository(session).get_by_id(task_id)
+            self.assertEqual(recovered.status, TaskStatus.QUEUED)
+            self.assertEqual(recovered.attempt_count, 1)
+            self.assertIsNone(recovered.started_at)
 
 
 if __name__ == "__main__":

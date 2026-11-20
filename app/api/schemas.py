@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -12,6 +12,7 @@ class Schema(BaseModel):
 
 
 class TranscriberSettingsCreate(Schema):
+    device: Literal["cpu", "cuda"] = "cpu"
     chunk_duration_seconds: float = Field(default=20, gt=0)
     chunk_overlap_seconds: float = Field(default=0, ge=0)
     use_vad: bool = False
@@ -31,6 +32,7 @@ class TranscriberSettingsRead(TranscriberSettingsCreate):
 
 
 class TranscriberCreate(Schema):
+    is_active: bool = True
     engine: str = Field(min_length=1, max_length=100, pattern=r"\S")
     model_name: str = Field(min_length=1, max_length=255, pattern=r"\S")
     settings_id: UUID
@@ -42,13 +44,13 @@ class TranscriberRead(TranscriberCreate):
 
 
 class TranscriptionTaskCreate(Schema):
-    transcriber_id: UUID
     original_filename: str = Field(min_length=1, pattern=r"\S")
-    audio_path: str = Field(min_length=1, pattern=r"\S")
 
 
 class TranscriptionTaskRead(TranscriptionTaskCreate):
     id: UUID
+    transcriber_id: UUID
+    file_uuid: UUID
     status: TaskStatus
     attempt_count: int = Field(ge=0)
     error_message: str | None
@@ -66,3 +68,6 @@ class TranscriptionCreate(Schema):
 class TranscriptionRead(TranscriptionCreate):
     pass
 
+
+class TranscriptionCommand(Schema):
+    task_id: UUID

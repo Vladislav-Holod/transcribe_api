@@ -8,6 +8,12 @@ from app.db.models import Base, TaskStatus, Transcriber, TranscriberSettings, Tr
 
 
 class ModelTests(unittest.TestCase):
+    def test_invalid_device_is_rejected_by_database(self):
+        with Session(self.engine) as session:
+            session.add(TranscriberSettings(device="gpu"))
+            with self.assertRaises(IntegrityError):
+                session.commit()
+
     def setUp(self):
         self.engine = create_engine("sqlite://")
 
@@ -29,7 +35,6 @@ class ModelTests(unittest.TestCase):
             tasks = [
                 TranscriptionTask(
                     transcriber_id=transcriber.id, original_filename=f"{index}.mp3",
-                    audio_path=f"audio/{index}.mp3",
                 )
                 for index in range(2)
             ]
@@ -38,6 +43,8 @@ class ModelTests(unittest.TestCase):
             self.assertEqual(tasks[0].status, TaskStatus.QUEUED)
             self.assertEqual(settings.chunk_duration_seconds, 20)
             self.assertEqual(tasks[0].attempt_count, 0)
+            self.assertIsNotNone(tasks[0].file_uuid)
+            self.assertNotEqual(tasks[0].file_uuid, tasks[1].file_uuid)
             session.add(Transcription(task_id=tasks[0].id, text="Привет", duration_seconds=5))
             session.commit()
             self.assertEqual(session.get(Transcription, tasks[0].id).text, "Привет")
@@ -56,7 +63,7 @@ class ModelTests(unittest.TestCase):
             session.add(transcriber)
             session.flush()
             session.add(TranscriptionTask(
-                transcriber_id=transcriber.id, original_filename="test.mp3", audio_path="audio/test.mp3",
+                transcriber_id=transcriber.id, original_filename="test.mp3",
             ))
             session.commit()
             session.delete(settings)

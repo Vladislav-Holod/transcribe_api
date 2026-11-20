@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "vlad", email = "Vlad62727273@yandex.ru" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
     "sqlalchemy[asyncio]>=2.0,<3.0",
     "aiosqlite>=0.20,<1.0",
@@ -16,6 +16,10 @@ dependencies = [
     "PyYAML>=6.0,<7.0",
     "alembic>=1.13,<2.0",
     "loguru>=0.8.0",
+    "uvicorn>=0.54.0",
+    "python-multipart>=0.0.34",
+    "aio-pika>=10.2.3",
+    "gigaam[longform,torch]",
 ]
 
 [build-system]
@@ -25,3 +29,11 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "app"
 module-root = ""
+
+[tool.uv.sources]
+gigaam = { git = "https://github.com/salute-developers/GigaAM.git" }
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]

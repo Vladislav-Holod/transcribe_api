@@ -1,4 +1,5 @@
 import tempfile
+import os
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -36,9 +37,10 @@ class ConfigTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(session, "execute", new_callable=AsyncMock) as execute:
                 self.assertEqual(config.transcriber.engine, "gigaam")
                 self.assertEqual(config.transcriber.settings.chunk_duration_seconds, 20)
+                self.assertEqual(config.transcriber.settings.device, "cpu")
                 execute.assert_not_called()
         async with self.factory.begin() as session:
-            settings = TranscriberSettings(chunk_duration_seconds=15)
+            settings = TranscriberSettings(chunk_duration_seconds=15, device="cuda")
             session.add(settings)
             await session.flush()
             replacement = Transcriber(engine="gigaam", model_name="v3_ctc", settings_id=settings.id)
@@ -51,6 +53,7 @@ class ConfigTests(unittest.IsolatedAsyncioTestCase):
             await config.load_transcriber(session)
         self.assertEqual(config.transcriber.model_name, "v3_ctc")
         self.assertEqual(config.transcriber.settings.chunk_duration_seconds, 15)
+        self.assertEqual(config.transcriber.settings.device, "cuda")
 
     async def test_missing_default_fails_clearly(self):
         config = Config()
@@ -71,9 +74,12 @@ class ConfigTests(unittest.IsolatedAsyncioTestCase):
             await session.flush()
             session.add(ServiceSettings(default_transcriber_id=transcriber.id))
         config = Config()
-        with patch.object(main, "SessionLocal", self.factory), patch.object(main, "engine", self.engine), patch.object(main, "config", config):
+        with patch.object(main, "SessionLocal", self.factory), patch.object(main, "engine", self.engine), patch.object(main, "config", config), patch.object(main, "RabbitConnection", autospec=True) as rabbit_class, patch.dict(os.environ, {"RABBITMQ_URL": "amqp://test:test@localhost/"}):
             async with main.lifespan(main.app):
                 self.assertEqual(config.transcriber.id, transcriber.id)
+                rabbit_class.return_value.connect.assert_awaited_once()
+                self.assertIs(main.app.state.task_publisher.rabbit, rabbit_class.return_value)
+            rabbit_class.return_value.close.assert_awaited_once()
 
 
 class YAMLConfigTests(unittest.TestCase):
